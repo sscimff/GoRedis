@@ -4,9 +4,14 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 )
 
-var storage = make(map[string]string)
+var storage = make(map[string]ExpiringValue)
+type ExpiringValue struct {
+	Value      string
+	ExpireAt   time.Time
+}
 
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
@@ -38,10 +43,21 @@ func handleConnection(conn net.Conn) {
 			}
 		// set a key to a value
 		case "set":
-			if len(command) == 3 {
+			if len(command) >= 3 {
 				key := command[1]
 				value := command[2]
-				storage[key] = value
+				expireTime := time.Time{}
+				if len(command) > 3 {
+					if strings.ToLower(command[3]) == "px" && len(command) > 4 {
+						duration, err := time.ParseDuration(command[4] + "ms")
+						if err != nil {
+							conn.Write([]byte("-ERR invalid PX duration\r\n"))
+							return
+						}
+						expireTime = time.Now().Add(duration)
+					}
+				}
+				storage[key] = ExpiringValue{Value: value, ExpireAt: expireTime}
 				conn.Write([]byte("+OK\r\n"))
 			} else {
 				conn.Write([]byte("-ERR SET command requires a key and a value\r\n"))
@@ -51,8 +67,8 @@ func handleConnection(conn net.Conn) {
 			if len(command) == 2 {
 				key := command[1]
 				value, ok := storage[key]
-				if ok {
-					response := fmt.Sprintf("$%d\r\n%s\r\n", len(value), value)
+				if ok && (value.ExpireAt.IsZero() || value.ExpireAt.After(time.Now())) {
+					response := fmt.Sprintf("$%d\r\n%s\r\n", len(value.Value), value.Value)
 					conn.Write([]byte(response))
 				} else {
 					conn.Write([]byte("$-1\r\n"))
