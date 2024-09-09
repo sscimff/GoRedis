@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+var storage = make(map[string]string)
+
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
@@ -17,7 +19,7 @@ func handleConnection(conn net.Conn) {
 			return
 		}
 
-		command, _ := parseCommand(buf[:n])  // Assuming this function is defined in parser.go
+		command, _ := parseCommand(buf[:n])
 
 		switch strings.ToLower(command[0]) {
 		case "ping":
@@ -33,6 +35,30 @@ func handleConnection(conn net.Conn) {
 				}
 			} else {
 				conn.Write([]byte("-ERR ECHO command requires an argument\r\n"))
+			}
+		// set a key to a value
+		case "set":
+			if len(command) == 3 {
+				key := command[1]
+				value := command[2]
+				storage[key] = value
+				conn.Write([]byte("+OK\r\n"))
+			} else {
+				conn.Write([]byte("-ERR SET command requires a key and a value\r\n"))
+			}
+		// get a value by key
+		case "get":
+			if len(command) == 2 {
+				key := command[1]
+				value, ok := storage[key]
+				if ok {
+					response := fmt.Sprintf("$%d\r\n%s\r\n", len(value), value)
+					conn.Write([]byte(response))
+				} else {
+					conn.Write([]byte("$-1\r\n"))
+				}
+			} else {
+				conn.Write([]byte("-ERR GET command requires a key\r\n"))
 			}
 		default:
 			conn.Write([]byte("-ERR unknown command\r\n"))
