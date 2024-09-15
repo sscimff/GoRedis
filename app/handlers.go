@@ -8,9 +8,10 @@ import (
 )
 
 var storage = make(map[string]ExpiringValue)
+
 type ExpiringValue struct {
-	Value      string
-	ExpireAt   time.Time
+	Value    string
+	ExpireAt time.Time
 }
 
 func handleConnection(conn net.Conn) {
@@ -75,6 +76,21 @@ func handleConnection(conn net.Conn) {
 				}
 			} else {
 				conn.Write([]byte("-ERR GET command requires a key\r\n"))
+			}
+		case "config":
+			if len(command) == 3 && strings.ToLower(command[1]) == "get" {
+				switch strings.ToLower(command[2]) {
+				case "dir":
+					response := fmt.Sprintf("*2\r\n$3\r\ndir\r\n$%d\r\n%s\r\n", len(config.Dir), config.Dir)
+					conn.Write([]byte(response))
+				case "dbfilename":
+					response := fmt.Sprintf("*2\r\n$9\r\ndbfilename\r\n$%d\r\n%s\r\n", len(config.DBFileName), config.DBFileName)
+					conn.Write([]byte(response))
+				default:
+					conn.Write([]byte("-ERR CONFIG subcommand not supported\r\n"))
+				}
+			} else {
+				conn.Write([]byte("-ERR CONFIG subcommand not supported\r\n"))
 			}
 		default:
 			conn.Write([]byte("-ERR unknown command\r\n"))
